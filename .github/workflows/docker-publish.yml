@@ -1,0 +1,58 @@
+name: Build and push image
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Docker Hub namespace: the repository variable DOCKERHUB_NAMESPACE if set,
+  # otherwise the DOCKERHUB_USERNAME secret. The 'local' fallback lets PR builds
+  # run before the secrets are configured.
+  IMAGE: ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME || 'local' }}/apcupsd-exporter
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read upstream ref from Dockerfile
+        id: ver
+        run: |
+          ref=$(grep -m1 '^ARG APCUPSD_REF=' Dockerfile | cut -d= -f2)
+          # Shorten commit hashes; keep tag names as-is (minus a leading v).
+          if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then ref="${ref:0:7}"; fi
+          echo "ref=${ref#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        if: github.event_name != 'pull_request'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=upstream-${{ steps.ver.outputs.ref }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          # Pull requests only check that the image builds.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

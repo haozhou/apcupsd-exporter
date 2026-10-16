@@ -1,7 +1,9 @@
 # apcupsd-exporter
-A Dockerfile for apcupsd_exporter
+A Dockerfile for [apcupsd_exporter](https://github.com/mdlayher/apcupsd_exporter).
+Images are built for `linux/amd64` and `linux/arm64` by GitHub Actions and
+pushed to Docker Hub on every push to the default branch.
 
-## An example of docker-composer.yml
+## An example of docker-compose.yml
 ```
 apcupsd-exporter:
     container_name: apcupsd-exporter
